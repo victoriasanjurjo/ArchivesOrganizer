@@ -3,6 +3,7 @@ Main window for ArchivesOrganizer with PySide6 GUI.
 Monochrome design, task visualization, simulation (Dry Run), and multithreaded execution.
 """
 
+import csv
 import os
 from datetime import datetime
 from typing import List, Optional
@@ -10,7 +11,7 @@ from typing import List, Optional
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QIcon, QFont
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QFileDialog, QComboBox, QCheckBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit,
     QProgressBar, QGroupBox, QMessageBox, QSplitter
@@ -74,6 +75,7 @@ class MainWindow(QMainWindow):
         self.db = AuditDatabaseManager()
         self.current_tasks: List[FileTask] = []
         self.worker: Optional[OrganizerWorker] = None
+        self._is_busy: bool = False
 
         self.setWindowTitle(f"{APP_TITLE} v{APP_VERSION} - 100% Local")
         self.resize(1000, 720)
@@ -183,12 +185,17 @@ class MainWindow(QMainWindow):
         self.btn_organize.clicked.connect(self._run_organization)
         self.btn_organize.setEnabled(False)
 
+        self.btn_export = QPushButton("Export Log")
+        self.btn_export.clicked.connect(self._export_log)
+        self.btn_export.setEnabled(False)
+
         self.btn_clear = QPushButton("Clear")
         self.btn_clear.setFixedWidth(90)
         self.btn_clear.clicked.connect(self._clear_all)
 
         actions_layout.addWidget(self.btn_preview)
         actions_layout.addWidget(self.btn_organize)
+        actions_layout.addWidget(self.btn_export)
         actions_layout.addStretch()
         actions_layout.addWidget(self.btn_clear)
         main_layout.addLayout(actions_layout)
@@ -265,70 +272,75 @@ class MainWindow(QMainWindow):
         self.log_view.append(f"[{ts}] {text}")
 
     def _run_simulation(self):
-        """Scans files and projects the reorganization (Dry Run) with granular error handling."""
+        """Scans files and projects the reorganization (Dry Run) with immediate button lockout and granular error handling."""
+        if self._is_busy or (self.worker and self.worker.isRunning()):
+            return
+
         src = self.src_input.text().strip()
         if not src:
             QMessageBox.warning(self, "Missing Path", "Please select a source folder before scanning.")
             return
 
-        dst = self.dst_input.text().strip() or src
-        mode = self.mode_combo.currentData()
-        recursive = self.recursive_chk.isChecked()
-
-        self._log(f"Starting scan in '{mode.value}' mode (Recursive: {recursive})...")
-        self.statusBar().showMessage("Scanning files...")
-
+        # Immediately lock critical action buttons to prevent duplicate triggers
+        self._set_ui_busy(True)
         try:
-            self.current_tasks = self.organizer.scan_files(src, dst, mode, recursive)
-        except PermissionError as e:
-            QMessageBox.critical(self, "Access Denied", str(e))
-            self._log(f"[Access Error] {e}")
-            self.statusBar().showMessage("Scan failed: Access denied")
-            return
-        except FileNotFoundError as e:
-            QMessageBox.critical(self, "Folder Missing", str(e))
-            self._log(f"[Not Found Error] {e}")
-            self.statusBar().showMessage("Scan failed: Folder missing")
-            return
-        except OSError as e:
-            QMessageBox.critical(self, "File System Error", str(e))
-            self._log(f"[System Error] {e}")
-            self.statusBar().showMessage("Scan failed: System error")
-            return
-        except ValueError as e:
-            QMessageBox.warning(self, "Invalid Path", str(e))
-            self._log(f"[Validation Error] {e}")
-            self.statusBar().showMessage("Scan failed: Invalid path")
-            return
+            dst = self.dst_input.text().strip() or src
+            mode = self.mode_combo.currentData()
+            recursive = self.recursive_chk.isChecked()
 
-        if not self.current_tasks:
-            self._populate_table([])
-            self._log("No files found to organize in the selected folder.")
-            self.statusBar().showMessage("No files found")
-            self.btn_organize.setEnabled(False)
-            return
+            self._log(f"Starting scan in '{mode.value}' mode (Recursive: {recursive})...")
+            self.statusBar().showMessage("Scanning files...")
 
-        # Simulate tasks
-        self.organizer.execute_tasks(self.current_tasks, dry_run=True)
-        self._populate_table(self.current_tasks)
+            try:
+                self.current_tasks = self.organizer.scan_files(src, dst, mode, recursive)
+            except PermissionError as e:
+                QMessageBox.critical(self, "Access Denied", str(e))
+                self._log(f"[Access Error] {e}")
+                self.statusBar().showMessage("Scan failed: Access denied")
+                return
+            except FileNotFoundError as e:
+                QMessageBox.critical(self, "Folder Missing", str(e))
+                self._log(f"[Not Found Error] {e}")
+                self.statusBar().showMessage("Scan failed: Folder missing")
+                return
+            except OSError as e:
+                QMessageBox.critical(self, "File System Error", str(e))
+                self._log(f"[System Error] {e}")
+                self.statusBar().showMessage("Scan failed: System error")
+                return
+            except ValueError as e:
+                QMessageBox.warning(self, "Invalid Path", str(e))
+                self._log(f"[Validation Error] {e}")
+                self.statusBar().showMessage("Scan failed: Invalid path")
+                return
 
-        movable_count = sum(1 for t in self.current_tasks if t.status != "Already at destination")
-        self._log(f"Simulation complete: {len(self.current_tasks)} files analyzed ({movable_count} ready to move).")
-        self.statusBar().showMessage(f"Simulation: {movable_count} files ready")
-        
-        # Log simulation session in local database
-        self.db.log_organization_run(
-            source_dir=src,
-            dest_dir=dst,
-            mode=mode.value,
-            recursive=recursive,
-            dry_run=True,
-            tasks=self.current_tasks
-        )
-        if self.db.last_error_message:
-            self._log(f"[Audit Notice] {self.db.last_error_message}")
+            if not self.current_tasks:
+                self._populate_table([])
+                self._log("No files found to organize in the selected folder.")
+                self.statusBar().showMessage("No files found")
+                return
 
-        self.btn_organize.setEnabled(movable_count > 0)
+            # Simulate tasks
+            self.organizer.execute_tasks(self.current_tasks, dry_run=True)
+            self._populate_table(self.current_tasks)
+
+            movable_count = sum(1 for t in self.current_tasks if t.status != "Already at destination")
+            self._log(f"Simulation complete: {len(self.current_tasks)} files analyzed ({movable_count} ready to move).")
+            self.statusBar().showMessage(f"Simulation: {movable_count} files ready")
+            
+            # Log simulation session in local database
+            self.db.log_organization_run(
+                source_dir=src,
+                dest_dir=dst,
+                mode=mode.value,
+                recursive=recursive,
+                dry_run=True,
+                tasks=self.current_tasks
+            )
+            if self.db.last_error_message:
+                self._log(f"[Audit Notice] {self.db.last_error_message}")
+        finally:
+            self._set_ui_busy(False)
 
     def _populate_table(self, tasks: List[FileTask]):
         """Populates the visual table with file tasks and friendly status tooltips."""
@@ -359,11 +371,17 @@ class MainWindow(QMainWindow):
             self.table.setItem(row, 4, item_status)
 
     def _run_organization(self):
-        """Executes the physical relocation of files."""
+        """Executes the physical relocation of files with immediate lockout protection."""
+        if self._is_busy or (self.worker and self.worker.isRunning()):
+            return
+
         movable = [t for t in self.current_tasks if t.status != "Already at destination"]
         if not movable:
             QMessageBox.information(self, "No Tasks", "There are no pending files to organize.")
             return
+
+        # Immediately lock critical action buttons before modal or thread start
+        self._set_ui_busy(True)
 
         reply = QMessageBox.question(
             self,
@@ -375,9 +393,9 @@ class MainWindow(QMainWindow):
 
         if reply != QMessageBox.Yes:
             self._log("Operation cancelled by user.")
+            self._set_ui_busy(False)
             return
 
-        self._set_ui_busy(True)
         self.progress_bar.setVisible(True)
         self.progress_bar.setMaximum(len(movable))
         self.progress_bar.setValue(0)
@@ -410,6 +428,7 @@ class MainWindow(QMainWindow):
         self._log(f"Operation complete. Success: {success}, Errors: {errors}.")
         self.statusBar().showMessage(f"Completed: {success} moved, {errors} errors")
         self.btn_organize.setEnabled(False)
+        self.btn_export.setEnabled(len(self.current_tasks) > 0)
 
         # Log physical execution session in local audit database
         src = self.src_input.text().strip()
@@ -449,20 +468,74 @@ class MainWindow(QMainWindow):
                 "Check the Activity Log below for full details on each affected file."
             )
 
+    def _export_log(self):
+        """Exports current task list and audit results to CSV with immediate button lockout."""
+        if self._is_busy or (self.worker and self.worker.isRunning()):
+            return
+
+        if not self.current_tasks:
+            QMessageBox.information(self, "No Data", "There are no file tasks or logs to export.")
+            return
+
+        # Immediately lock critical action buttons to avoid duplicate dialogs/writes
+        self._set_ui_busy(True)
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            default_filename = f"organizer_export_{timestamp}.csv"
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "Export Log / Report", default_filename, "CSV Files (*.csv);;Text Files (*.txt);;All Files (*.*)"
+            )
+            if not file_path:
+                self._log("Export cancelled by user.")
+                return
+
+            with open(file_path, mode="w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Filename", "Category", "Size (Bytes)", "Source Path", "Target Folder", "Status", "Error Message"])
+                for task in self.current_tasks:
+                    writer.writerow([
+                        task.filename,
+                        task.category,
+                        task.size_bytes,
+                        task.source_path,
+                        task.target_folder,
+                        task.status,
+                        task.error_message or ""
+                    ])
+            self._log(f"Report exported successfully to: {file_path}")
+            QMessageBox.information(self, "Export Successful", f"Log report successfully saved to:\n{file_path}")
+        except (OSError, PermissionError) as e:
+            QMessageBox.critical(self, "Export Failed", f"Could not save file:\n{str(e)}")
+            self._log(f"[Export Error] {e}")
+        finally:
+            self._set_ui_busy(False)
+
     def _set_ui_busy(self, busy: bool):
+        """Immediately locks or unlocks critical action buttons and inputs to prevent duplicate triggers or race conditions."""
+        self._is_busy = busy
         self.btn_preview.setEnabled(not busy)
-        self.btn_organize.setEnabled(not busy)
+        movable_count = sum(1 for t in self.current_tasks if t.status != "Already at destination")
+        self.btn_organize.setEnabled(not busy and movable_count > 0)
+        self.btn_export.setEnabled(not busy and len(self.current_tasks) > 0)
         self.btn_clear.setEnabled(not busy)
         self.src_btn.setEnabled(not busy)
         self.dst_btn.setEnabled(not busy)
+        self.src_input.setEnabled(not busy)
+        self.dst_input.setEnabled(not busy)
         self.mode_combo.setEnabled(not busy)
         self.recursive_chk.setEnabled(not busy)
+        # Flush pending GUI events immediately so OS/Qt widgets refresh without delay
+        QApplication.processEvents()
 
     def _clear_all(self):
-        """Resets the state of the user interface."""
+        """Resets the state of the user interface with reentrant guard."""
+        if self._is_busy or (self.worker and self.worker.isRunning()):
+            return
+
         self.table.setRowCount(0)
         self.current_tasks.clear()
         self.btn_organize.setEnabled(False)
+        self.btn_export.setEnabled(False)
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(False)
         self._log("Table and state reset.")

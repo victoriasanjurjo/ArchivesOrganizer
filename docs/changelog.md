@@ -56,6 +56,36 @@ Whenever code or project files are updated, add a new entry to the top of Sectio
 
 ## 3. Modification History
 
+### [Date: 2026-10-27] - Immediate Button Lockout, Reentrancy Prevention & Export Feature
+
+- **Goal in Plain English:**  
+  Make sure critical action buttons (Simulate, Organize, Export, and Clear) turn off immediately when you click them so double-clicking or pressing Enter cannot accidentally trigger duplicate operations, duplicate files, or freeze the application. Also added an Export button to save your organization results as a clean spreadsheet file.
+
+- **What Was Changed:**
+  1. **Instant Button Disabling (`src/ui/main_window.py`):**
+     - When you click "Simulate / Preview", "Organize Files", "Export Log", or "Clear", the button disables instantly on your screen before the app begins processing.
+     - Folder pickers, text inputs, checkboxes, and menu options are also temporarily locked while the app is busy scanning or moving files.
+     - Windows is told immediately to refresh the buttons so you cannot accidentally click them twice.
+  2. **Reentrancy Protection Guard:**
+     - Added an internal busy lock (`_is_busy`) and background worker check. If any secondary click or keypress arrives while work is underway, it is ignored safely.
+     - Wrapped all tasks in safety blocks so that whether an operation succeeds or fails, the buttons always turn back on automatically when done.
+  3. **Export Log to CSV Button:**
+     - Added a dedicated "Export Log" button right on the main screen next to Organize and Clear.
+     - Lets you save a full report of all analyzed or moved files to a `.csv` spreadsheet file (complete with file sizes, categories, and any error notes).
+  4. **Automated Button Lock Tests (`tests/test_ui_locks.py`):**
+     - Created 5 new automated tests specifically verifying that buttons lock instantly, duplicate clicks are rejected, and CSV log files save accurately without freezing the window.
+
+- **Why This Matters to the User:**
+  - Prevents accidental double-clicks from running the same job twice or trying to move files that are already being moved.
+  - Keeps the interface smooth and responsive without unexpected behavior.
+  - Gives you a one-click way to save a clean audit report of your files.
+
+- **Safety Checks & Test Results:**
+  - Ran the full test suite with 58 automated tests (`test_organizer.py`, `test_edge_cases.py`, `test_errors_and_db.py`, and `test_ui_locks.py`). All 58 tests passed with zero errors.
+
+- **Application Status:**
+  - The standalone Windows app (`ArchivesOrganizer.exe`) has been recompiled and is ready to run immediately.
+
 ### [Date: 2026-10-27] - Granular Error Management & Local SQLite Audit Database
 
 - **Goal in Plain English:**  

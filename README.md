@@ -12,6 +12,8 @@
   - **By Exact Extension:** Creates folders named after the exact extension (e.g., `PDF/`, `PNG/`, `DOCX/`).
   - **By Date (Year/Month):** Organizes files according to their last modified date into time-based folders (e.g., `2026-10/`).
 - **Simulation / Preview Mode (Dry Run):** Visually inspect projected operations before making any physical alterations to disk.
+- **Immediate Button Lockout & Reentrancy Safety:** All critical buttons (Simulate, Organize, Export, Clear) and inputs lock immediately upon being triggered, avoiding race conditions, duplicate worker threads, or corrupted states.
+- **Audit Export to CSV:** One-click export of analyzed or organized files to standard `.csv` spreadsheet reports.
 - **Overwrite Prevention (Collision Resolution):** If a file with the same name already exists in the destination folder, an incremental counter is automatically appended (e.g., `document (1).pdf`).
 - **Recursive Scanning Support:** Option to organize only the root of the chosen folder or process all nested subfolders.
 - **Real-Time Audit Logging:** Integrated activity console providing a live chronological record of every operation.
@@ -29,7 +31,8 @@ ArchivesOrganizer/
 ├── tests/                       # Automated unit test suite
 │   ├── test_organizer.py        # Standard logic and simulation tests
 │   ├── test_edge_cases.py       # Comprehensive edge case tests (nulls, giant inputs, etc.)
-│   └── test_errors_and_db.py    # Granular I/O error formatting and SQLite database tests
+│   ├── test_errors_and_db.py    # Granular I/O error formatting and SQLite database tests
+│   └── test_ui_locks.py         # Immediate button lockout and reentrancy safety tests
 ├── config/                      # Category and extension configurations
 │   └── default_config.py
 ├── assets/                      # Icons and visual resources (.ico, .png)
@@ -58,14 +61,14 @@ ArchivesOrganizer/
 
 ## Automated Unit Testing
 
-The project maintains comprehensive test coverage across both standard workflows, extreme edge cases, and granular error handling:
+The project maintains comprehensive test coverage across standard workflows, extreme edge cases, granular error handling, and button safety:
 
 ```bash
-# Run all unit tests (standard, edge cases, and database)
+# Run all unit tests (58 passing tests)
 python -m unittest discover tests
 
-# Run granular error and database tests specifically
-python -m unittest tests/test_errors_and_db.py
+# Run UI lockout and reentrancy prevention tests specifically
+python -m unittest tests/test_ui_locks.py
 ```
 
 ---

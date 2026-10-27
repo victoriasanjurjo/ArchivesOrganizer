@@ -77,3 +77,19 @@ Rather than emitting raw Python exceptions (e.g., `[WinError 32] The process can
 - Employs a local SQLite database (`outputs/archives_history.db`) to record each organization run and its granular file tasks.
 - Database access is isolated with timeouts and granular handlers for `sqlite3.OperationalError`, `sqlite3.IntegrityError`, and `sqlite3.DatabaseError`.
 - If the database file is unwritable, a warning is logged to the user activity console, but primary file reorganization is never blocked or compromised.
+
+## 6. Immediate Critical Action Button Lockout & Reentrancy Prevention
+
+### 6.1 Vulnerability Analysis: Race Conditions and Duplicate Executions
+In desktop GUI frameworks like Qt/PySide6, rapid double-clicks, keyboard shortcuts (such as pressing `Space` or `Enter` multiple times), or modal dialog display latency can trigger multiple concurrent calls to slots:
+- Repeated clicks on "Simulate / Preview" could trigger overlapping directory scans and inconsistent memory tables.
+- Multiple clicks on "Organize Files (Move)" could launch concurrent worker threads attempting to move the exact same files simultaneously, resulting in `FileNotFoundError` or race conditions.
+- Multiple clicks on "Export Log" could cause multiple file dialogs and duplicate file writing.
+
+### 6.2 Defensive Architecture & Solution
+To eliminate race conditions and duplicated executions:
+1. **Synchronous Guard Flags (`self._is_busy` & `worker.isRunning()`):** Every critical entry point (`_run_simulation`, `_run_organization`, `_export_log`, `_clear_all`) checks both conditions on its first line and returns immediately if active.
+2. **Immediate Lockout (`self._set_ui_busy(True)`):** Critical buttons (`btn_preview`, `btn_organize`, `btn_export`, `btn_clear`) and path/parameter inputs (`src_btn`, `dst_btn`, `src_input`, `dst_input`, `mode_combo`, `recursive_chk`) are disabled on the spot.
+3. **Event Queue Flushing (`QApplication.processEvents()`):** Immediately called after locking controls so the operating system window manager repaints the disabled state before any intensive or blocking work begins.
+4. **Fail-Safe Restoration (`try ... finally`):** UI lockout restoration (`self._set_ui_busy(False)`) is guaranteed in `finally` blocks for synchronous operations, and bound to `finished_tasks` signal for background worker threads.
+
