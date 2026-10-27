@@ -1,6 +1,6 @@
 """
-Hojas de estilo QSS con diseño sobrio, moderno y monocromático.
-Paleta: Escala de grises, carbón, blancos y contrastes neutros.
+QSS Stylesheets with minimalist, modern, and monochrome design.
+Palette: Grayscale, charcoal, whites, and neutral contrasts.
 """
 
 MONOCHROME_STYLE = """

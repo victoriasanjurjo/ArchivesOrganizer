@@ -1,34 +1,59 @@
-# Arquitectura Técnica y Bitácora de Decisiones - ArchivesOrganizer
+# Technical Architecture & Decision Log - ArchivesOrganizer
 
-## 1. Visión General del Proyecto
-**ArchivesOrganizer** es una herramienta de escritorio 100% local desarrollada en Python y PySide6 (Qt) diseñada para clasificar y organizar archivos de forma automatizada y segura. No requiere conexión a internet ni envía telemetría.
+## 1. Project Overview
+**ArchivesOrganizer** is a 100% local desktop tool developed in Python and PySide6 (Qt) designed to classify and reorganize files automatically and securely. It operates completely offline, requiring no internet connectivity and emitting no telemetry.
 
-## 2. Decisiones Técnicas y Justificación
+## 2. Technical Decisions and Rationale
 
-### 2.1 Interfaz Gráfica: PySide6 (Qt for Python)
-- **Motivo de elección:** PySide6 ofrece rendimiento nativo en Windows, gestión de hilos mediante `QThread`/`Signal` para no congelar la GUI durante operaciones intensivas de E/S de disco, y soporte para estilos avanzados mediante Qt Style Sheets (QSS).
-- **Estética Monocromática:** Se implementa una paleta sobria en escala de grises / negro y blanco con acentos neutros, asegurando contraste accesible, legibilidad técnica y aspecto moderno sin saturación visual.
+### 2.1 Graphical User Interface: PySide6 (Qt for Python)
+- **Selection Rationale:** PySide6 provides native performance on Windows, robust thread management via `QThread`/`Signal` to prevent GUI freezing during heavy disk I/O operations, and support for advanced styling through Qt Style Sheets (QSS).
+- **Monochrome Aesthetics:** A minimalist palette of charcoal, dark gray, white, and neutral accents was implemented, ensuring high contrast, clean typography, and a modern feel without visual distraction.
 
-### 2.2 Modalidades de Organización Soportadas
-1. **Por Categoría:** Agrupa los archivos según su propósito semántico (Documentos, Imágenes, Videos, Audio, Comprimidos, Código, Ejecutables, Otros).
-2. **Por Extensión Exacta:** Crea una carpeta por cada extensión encontrada (ej. `pdf/`, `docx/`, `png/`).
-3. **Por Fecha (Año/Mes):** Organiza según la fecha de última modificación del archivo en carpetas estructuradas como `YYYY/YYYY-MM/` o `YYYY-MM/`.
+### 2.2 Supported Organization Modes
+1. **By Category:** Groups files according to their semantic purpose (Documents, Images, Videos, Audio, Compressed, Code, Executables & Installers, Others).
+2. **By Exact Extension:** Creates a folder for each extension discovered (e.g., `PDF/`, `DOCX/`, `PNG/`).
+3. **By Date (Year/Month):** Organizes files based on their last modified timestamp into folders structured as `YYYY-MM/`.
 
-### 2.3 Seguridad y Prevención de Pérdida de Datos
-- **Modo Vista Previa / Simulación (Dry Run):** Permite al usuario escanear la carpeta y ver la tabla de origen -> destino proyectado antes de alterar cualquier archivo en disco.
-- **Resolución de Colisiones:** Si un archivo con el mismo nombre ya existe en la carpeta de destino, se añade automáticamente un sufijo numérico incremental (ej. `reporte (1).pdf`), impidiendo sobreescrituras accidentales.
-- **Operación Local Atómica:** Las operaciones utilizan `shutil.move` / `os.replace` controlando excepciones por permisos, bloqueos de archivo o rutas largas.
-- **Registro de Auditoría (Logging):** Se emiten registros de cada acción realizada en la consola de la app y opcionalmente en un log local.
+### 2.3 Safety and Data Loss Prevention
+- **Simulation / Preview Mode (Dry Run):** Allows users to scan folders and inspect the projected source-to-target mapping in a visual table before altering any physical file on disk.
+- **Collision Resolution:** If a file with the same name already exists in the destination folder, an incremental numerical suffix is automatically appended (e.g., `report (1).pdf`), preventing accidental overwrites.
+- **Atomic Local Operations:** Relocation relies on `shutil.move` with exception isolation for permissions, file locks, or long paths.
+- **Audit Logging:** Every operation and status change is emitted in real time to the application activity console.
 
-### 2.4 Empaquetado: PyInstaller
-- Se compila en modo `--windowed` (sin ventana de consola de comandos emergente).
-- Se genera un ícono personalizado representativo en `assets/icon.ico` y `assets/icon.png` incluido en el binario final.
+### 2.4 Packaging: PyInstaller
+- Compiled in `--windowed` mode (suppressing the terminal console).
+- Incorporates a custom icon located at `assets/icon.ico` and `assets/icon.png` into the final standalone binary.
 
-## 3. Estructura de Módulos
-- `main.py`: Punto de entrada de la aplicación.
-- `src/organizer.py`: Lógica del motor de organización (escaneo, clasificación, simulación y ejecución).
-- `src/ui/`: Componentes de interfaz gráfica, ventana principal y estilos QSS monocromáticos.
-- `config/`: Configuración de categorías de archivos y metadatos.
-- `assets/`: Ícono de la aplicación y recursos visuales.
-- `tests/`: Pruebas unitarias de clasificación y resolución de colisiones.
-- `docs/`: Documentación técnica y bitácora.
+## 3. Module Structure
+- `main.py`: Application entry point.
+- `src/organizer.py`: Core organization logic (scanning, classification, simulation, and physical execution).
+- `src/ui/`: Graphical user interface components, main window, and monochrome QSS styling.
+- `config/`: File category definitions, default extensions, and metadata.
+- `assets/`: Application icon and visual resources.
+- `tests/`: General unit tests (`test_organizer.py`) and edge case test suite (`test_edge_cases.py`).
+- `docs/`: Technical architecture documentation (`architecture.md`) and modification register (`changelog.md`).
+
+## 4. Unit Testing Strategy and Edge Case Handling
+
+To ensure enterprise-grade reliability in production environments with messy and arbitrary user data, `FileOrganizer` implements defensive programming verified by a comprehensive automated test suite (`tests/test_edge_cases.py`):
+
+1. **Giant Text Inputs:**
+   - *Mitigated Risk:* Buffer overflows, quadratic parsing latency, or memory exhaustion on filenames or extensions exceeding 100,000 characters.
+   - *Behavior:* Suffixes and extensions are processed safely using `os.path.splitext` without unbounded string concatenations.
+
+2. **Special Characters and Multilingual Filenames:**
+   - *Mitigated Risk:* Character encoding corruptions on non-ASCII characters, accents (`á, é, í, ó, ú, ñ, ü`), non-Latin scripts (Cyrillic, Chinese, Japanese, Arabic, Greek), and emojis (`📸, 🚀, 💻`).
+   - *Behavior:* Transparent UTF-8 handling preserved natively by the operating system, with error isolation when encountering OS-restricted path characters (`*`, `?`, `<`, `>`, `|`, `:`).
+   - *System and Hidden Files:* Robust parsing of `.gitignore`, `.env`, and files ending in solitary dots (`file.`), safely classifying them as `No Extension` / `No_Extension`.
+
+3. **Empty Strings and Blank Values:**
+   - *Mitigated Risk:* `IndexError` or string split failures.
+   - *Behavior:* Empty strings (`""`) or whitespace-only inputs (`"   "`) immediately fall back to safe defaults (`"No Extension"` or `"No_Extension"`).
+
+4. **Null Values (`None`):**
+   - *Mitigated Risk:* `TypeError: expected str, bytes or os.PathLike object, not NoneType`.
+   - *Behavior:* Explicit `isinstance(..., str)` type checks before path operations. When `None` is passed to scanning functions, a clear and actionable `ValueError` is raised.
+
+5. **Invalid Formats and Unexpected Types:**
+   - *Mitigated Risk:* Passing integers, booleans, lists, or custom objects where strings or enum modes are expected.
+   - *Behavior:* Graceful fallback to safe categories and destination names (`"No Extension"`, `"Miscellaneous"`), with exception shielding in progress callbacks to avoid interrupting active file moving operations.

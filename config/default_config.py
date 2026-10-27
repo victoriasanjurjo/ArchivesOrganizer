@@ -1,16 +1,16 @@
 """
-Configuración por defecto para ArchivesOrganizer.
-Define las categorías y extensiones asociadas para la clasificación de archivos.
+Default configuration for ArchivesOrganizer.
+Defines categories and associated file extensions for file classification.
 """
 
 from typing import Dict, List
 
 DEFAULT_CATEGORIES: Dict[str, List[str]] = {
-    "Documentos": [
+    "Documents": [
         ".pdf", ".doc", ".docx", ".odt", ".rtf", ".tex", ".txt", ".md",
         ".xls", ".xlsx", ".ods", ".csv", ".ppt", ".pptx", ".odp"
     ],
-    "Imágenes": [
+    "Images": [
         ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff", ".svg",
         ".ico", ".raw", ".psd", ".ai"
     ],
@@ -22,18 +22,19 @@ DEFAULT_CATEGORIES: Dict[str, List[str]] = {
         ".mp3", ".wav", ".aac", ".flac", ".ogg", ".wma", ".m4a", ".opus",
         ".mid", ".midi"
     ],
-    "Comprimidos": [
+    "Compressed": [
         ".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz", ".iso", ".tgz"
     ],
-    "Programación": [
+    "Code": [
         ".py", ".js", ".ts", ".html", ".css", ".java", ".c", ".cpp", ".cs",
         ".go", ".rs", ".php", ".rb", ".json", ".xml", ".yaml", ".yml", ".sql", ".sh", ".bat", ".ps1"
     ],
-    "Ejecutables e Instaladores": [
+    "Executables & Installers": [
         ".exe", ".msi", ".bat", ".cmd", ".apk", ".dmg", ".app", ".bin"
     ],
-    "Otros": []
+    "Others": []
 }
 
 APP_TITLE = "ArchivesOrganizer"
 APP_VERSION = "1.0.0"
+

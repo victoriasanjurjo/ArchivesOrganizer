@@ -1,6 +1,6 @@
 """
-Punto de entrada principal para ArchivesOrganizer.
-Inicializa la aplicación PySide6 y la ventana con tema monocromático.
+Main entry point for ArchivesOrganizer.
+Initializes the PySide6 application and window with monochrome theme.
 """
 
 import os
@@ -13,7 +13,7 @@ from src.ui.main_window import MainWindow
 
 
 def main():
-    # Soporte para DPI alto en Windows
+    # Support high DPI on Windows
     app = QApplication(sys.argv)
     app.setApplicationName(APP_TITLE)
     app.setOrganizationName("ArchivesOrganizer")

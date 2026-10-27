@@ -1,6 +1,6 @@
 """
-Módulo de lógica principal para la organización local de archivos.
-Provee escaneo, clasificación, simulación (Dry Run) y ejecución de movimientos seguros.
+Core logic module for local file organization.
+Provides scanning, classification, simulation (Dry Run), and secure file moving.
 """
 
 import os
@@ -13,9 +13,9 @@ from config.default_config import DEFAULT_CATEGORIES
 
 
 class OrganizationMode(Enum):
-    CATEGORY = "Por Categoría"
-    EXTENSION = "Por Extensión"
-    DATE = "Por Fecha (Año/Mes)"
+    CATEGORY = "By Category"
+    EXTENSION = "By Extension"
+    DATE = "By Date (Year/Month)"
 
 
 @dataclass
@@ -27,34 +27,46 @@ class FileTask:
     category: str
     size_bytes: int
     modified_time: datetime
-    status: str = "Pendiente"  # "Pendiente", "Simulado", "Movido", "Omitido", "Error"
+    status: str = "Pending"  # "Pending", "Simulated", "Moved", "Skipped", "Error", "Already at destination"
     error_message: str = ""
 
 
 class FileOrganizer:
     """
-    Motor encargado de clasificar y reubicar archivos en el sistema local.
+    Engine responsible for classifying and reorganizing files on the local file system.
     """
 
     def __init__(self, categories: Optional[Dict[str, List[str]]] = None):
-        self.categories = categories or DEFAULT_CATEGORIES
+        self.categories = categories if categories is not None else DEFAULT_CATEGORIES
         self._ext_to_category = self._build_extension_lookup()
 
     def _build_extension_lookup(self) -> Dict[str, str]:
-        """Crea un mapa rápido de extensión en minúsculas a nombre de categoría."""
+        """Creates a fast lookup mapping from lowercase extension to category name."""
         lookup = {}
+        if not isinstance(self.categories, dict):
+            return lookup
+
         for category, extensions in self.categories.items():
+            if not category or not isinstance(extensions, (list, tuple, set)):
+                continue
             for ext in extensions:
-                lookup[ext.lower()] = category
+                if isinstance(ext, str) and ext.strip():
+                    clean_ext = ext.strip().lower()
+                    if not clean_ext.startswith("."):
+                        clean_ext = f".{clean_ext}"
+                    lookup[clean_ext] = str(category)
         return lookup
 
     def get_category_for_file(self, filename: str) -> str:
-        """Determina la categoría de un archivo basándose en su extensión."""
+        """Determines the category of a file based on its extension."""
+        if not filename or not isinstance(filename, str):
+            return "No Extension"
+
         _, ext = os.path.splitext(filename)
-        ext = ext.lower()
-        if not ext:
-            return "Sin Extensión"
-        return self._ext_to_category.get(ext, "Otros")
+        ext = ext.strip().lower()
+        if not ext or ext == ".":
+            return "No Extension"
+        return self._ext_to_category.get(ext, "Others")
 
     def get_destination_folder_name(
         self,
@@ -62,38 +74,52 @@ class FileOrganizer:
         mode: OrganizationMode,
         date_format: str = "%Y-%m"
     ) -> str:
-        """Calcula el nombre de la subcarpeta destino según el modo seleccionado."""
-        filename = os.path.basename(filepath)
+        """Calculates the destination subfolder name based on the selected mode."""
+        if not filepath or not isinstance(filepath, str):
+            filename = ""
+        else:
+            filename = os.path.basename(filepath)
         
         if mode == OrganizationMode.CATEGORY:
             return self.get_category_for_file(filename)
             
         elif mode == OrganizationMode.EXTENSION:
+            if not filename:
+                return "No_Extension"
             _, ext = os.path.splitext(filename)
-            if not ext:
-                return "Sin_Extension"
-            return ext.lstrip(".").upper()
+            ext = ext.strip()
+            if not ext or ext == ".":
+                return "No_Extension"
+            clean_ext = ext.lstrip(".").upper()
+            return clean_ext if clean_ext else "No_Extension"
             
         elif mode == OrganizationMode.DATE:
             try:
+                if not filepath or not isinstance(filepath, str) or not os.path.exists(filepath):
+                    return "Unknown_Date"
                 mtime = os.path.getmtime(filepath)
                 dt = datetime.fromtimestamp(mtime)
-                return dt.strftime(date_format)
+                fmt = date_format if (isinstance(date_format, str) and date_format.strip()) else "%Y-%m"
+                formatted = dt.strftime(fmt)
+                return formatted if formatted.strip() else "Unknown_Date"
             except Exception:
-                return "Fecha_Desconocida"
+                return "Unknown_Date"
                 
-        return "Varios"
+        return "Miscellaneous"
 
     def resolve_target_collision(self, target_folder: str, filename: str) -> str:
         """
-        Garantiza que no se sobreescriba un archivo existente, agregando un sufijo numérico si es necesario.
+        Ensures existing files are not overwritten by appending an incremental number suffix if needed.
         """
-        base_name, ext = os.path.splitext(filename)
-        candidate_path = os.path.join(target_folder, filename)
+        safe_target_folder = target_folder if (target_folder and isinstance(target_folder, str)) else "."
+        safe_filename = filename if (filename and isinstance(filename, str)) else "file"
+
+        base_name, ext = os.path.splitext(safe_filename)
+        candidate_path = os.path.join(safe_target_folder, safe_filename)
         counter = 1
 
         while os.path.exists(candidate_path):
-            candidate_path = os.path.join(target_folder, f"{base_name} ({counter}){ext}")
+            candidate_path = os.path.join(safe_target_folder, f"{base_name} ({counter}){ext}")
             counter += 1
 
         return candidate_path
@@ -107,19 +133,19 @@ class FileOrganizer:
         date_format: str = "%Y-%m"
     ) -> List[FileTask]:
         """
-        Escanea los archivos en el directorio origen y proyecta las operaciones sin modificar disco.
+        Scans files in the source directory and projects operations without modifying disk state.
         """
-        if not os.path.isdir(source_dir):
-            raise ValueError(f"El directorio origen no existe: {source_dir}")
+        if not source_dir or not isinstance(source_dir, str) or not os.path.isdir(source_dir):
+            raise ValueError(f"Source directory does not exist or is invalid: {source_dir}")
 
-        if not dest_dir:
+        if not dest_dir or not isinstance(dest_dir, str):
             dest_dir = source_dir
 
         tasks: List[FileTask] = []
         normalized_source = os.path.abspath(source_dir)
         normalized_dest = os.path.abspath(dest_dir)
 
-        # Determinar si el destino está dentro del origen para evitar procesar carpetas creadas
+        # Check if destination is inside source to avoid scanning newly created subfolders
         def is_subpath(child: str, parent: str) -> bool:
             try:
                 rel = os.path.relpath(child, parent)
@@ -129,7 +155,7 @@ class FileOrganizer:
 
         if recursive:
             for root, dirs, files in os.walk(normalized_source):
-                # Evitar entrar al directorio destino si está anidado
+                # Avoid entering destination directory if nested
                 if is_subpath(root, normalized_dest) and root != normalized_source:
                     continue
 
@@ -147,7 +173,7 @@ class FileOrganizer:
                             if task:
                                 tasks.append(task)
             except PermissionError as e:
-                raise PermissionError(f"Sin permiso para leer la carpeta: {e}")
+                raise PermissionError(f"Permission denied reading directory: {e}")
 
         return tasks
 
@@ -158,7 +184,7 @@ class FileOrganizer:
         mode: OrganizationMode,
         date_format: str
     ) -> Optional[FileTask]:
-        """Crea una tarea proyectada para un archivo individual."""
+        """Creates a projected operation task for an individual file."""
         filename = os.path.basename(filepath)
         
         try:
@@ -172,14 +198,13 @@ class FileOrganizer:
         subfolder_name = self.get_destination_folder_name(filepath, mode, date_format)
         target_folder = os.path.join(dest_dir, subfolder_name)
         
-        # Si el archivo ya se encuentra en su destino proyectado, se marca como no necesario
+        # If the file is already in its projected destination, mark as already in destination
         current_folder = os.path.dirname(os.path.abspath(filepath))
         if os.path.abspath(target_folder) == current_folder:
-            status = "Ya en destino"
+            status = "Already at destination"
             target_path = filepath
         else:
-            status = "Pendiente"
-            # Proyectar resolución de nombre
+            status = "Pending"
             target_path = os.path.join(target_folder, filename)
 
         category = self.get_category_for_file(filename)
@@ -202,26 +227,38 @@ class FileOrganizer:
         progress_callback: Optional[Callable[[int, int, FileTask], None]] = None
     ) -> List[FileTask]:
         """
-        Ejecuta las tareas proyectadas o simula su ejecución si dry_run es True.
+        Executes projected tasks or simulates their execution if dry_run is True.
         """
+        if not tasks or not isinstance(tasks, list):
+            return []
+
         total = len(tasks)
         for idx, task in enumerate(tasks):
-            if task.status == "Ya en destino":
+            if not isinstance(task, FileTask):
+                continue
+
+            if task.status == "Already at destination":
                 if progress_callback:
-                    progress_callback(idx + 1, total, task)
+                    try:
+                        progress_callback(idx + 1, total, task)
+                    except Exception:
+                        pass
                 continue
 
             if dry_run:
-                task.status = "Simulado"
+                task.status = "Simulated"
                 if progress_callback:
-                    progress_callback(idx + 1, total, task)
+                    try:
+                        progress_callback(idx + 1, total, task)
+                    except Exception:
+                        pass
                 continue
 
             try:
-                # Crear carpeta destino si no existe
+                # Create destination folder if it does not exist
                 os.makedirs(task.target_folder, exist_ok=True)
                 
-                # Resolver colisión real al momento de mover
+                # Resolve real collision at time of moving
                 final_target_path = self.resolve_target_collision(
                     task.target_folder,
                     os.path.basename(task.source_path)
@@ -229,12 +266,16 @@ class FileOrganizer:
                 
                 shutil.move(task.source_path, final_target_path)
                 task.target_path = final_target_path
-                task.status = "Movido"
+                task.status = "Moved"
             except Exception as e:
                 task.status = "Error"
                 task.error_message = str(e)
 
             if progress_callback:
-                progress_callback(idx + 1, total, task)
+                try:
+                    progress_callback(idx + 1, total, task)
+                except Exception:
+                    pass
 
         return tasks
+

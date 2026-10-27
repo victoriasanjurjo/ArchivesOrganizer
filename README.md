@@ -24,9 +24,11 @@
 ```text
 ArchivesOrganizer/
 ├── docs/                        # Documentación técnica, decisiones y bitácora
-│   └── architecture.md
+│   ├── architecture.md          # Arquitectura técnica y justificaciones
+│   └── changelog.md             # Registro de modificaciones y bitácora (en inglés claro)
 ├── tests/                       # Pruebas unitarias automatizadas
-│   └── test_organizer.py
+│   ├── test_organizer.py        # Pruebas estándar de lógica y simulación
+│   └── test_edge_cases.py       # Pruebas de casos extremos (nulos, gigantes, etc.)
 ├── config/                      # Ajustes y configuración de categorías
 │   └── default_config.py
 ├── assets/                      # Íconos y recursos visuales (.ico, .png)
@@ -46,6 +48,20 @@ ArchivesOrganizer/
 ├── LICENSE.txt                  # Licencia de software MIT
 ├── README.md                    # Manual y documentación general
 └── main.py                      # Punto de entrada de la aplicación
+```
+
+---
+
+## Pruebas Unitarias Automatizadas
+
+El proyecto cuenta con una cobertura integral de pruebas que abarca el flujo nominal y la tolerancia a anomalías del entorno:
+
+```bash
+# Ejecutar todas las pruebas unitarias (estándar y casos extremos)
+python -m unittest discover tests
+
+# Ejecutar específicamente la suite de casos extremos
+python -m unittest tests/test_edge_cases.py
 ```
 
 ---
