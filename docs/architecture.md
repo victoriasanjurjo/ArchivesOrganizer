@@ -26,11 +26,13 @@
 
 ## 3. Module Structure
 - `main.py`: Application entry point.
-- `src/organizer.py`: Core organization logic (scanning, classification, simulation, and physical execution).
+- `src/organizer.py`: Core organization logic engine (scanning, classification, simulation, and physical execution).
+- `src/errors.py`: Granular file system and database error translation into user-friendly explanations.
+- `src/database.py`: Local SQLite database manager for audit logs and session history.
 - `src/ui/`: Graphical user interface components, main window, and monochrome QSS styling.
 - `config/`: File category definitions, default extensions, and metadata.
 - `assets/`: Application icon and visual resources.
-- `tests/`: General unit tests (`test_organizer.py`) and edge case test suite (`test_edge_cases.py`).
+- `tests/`: General unit tests (`test_organizer.py`), edge cases (`test_edge_cases.py`), and error/db tests (`test_errors_and_db.py`).
 - `docs/`: Technical architecture documentation (`architecture.md`) and modification register (`changelog.md`).
 
 ## 4. Unit Testing Strategy and Edge Case Handling
@@ -57,3 +59,21 @@ To ensure enterprise-grade reliability in production environments with messy and
 5. **Invalid Formats and Unexpected Types:**
    - *Mitigated Risk:* Passing integers, booleans, lists, or custom objects where strings or enum modes are expected.
    - *Behavior:* Graceful fallback to safe categories and destination names (`"No Extension"`, `"Miscellaneous"`), with exception shielding in progress callbacks to avoid interrupting active file moving operations.
+
+## 5. Granular Error Management & Local SQLite Audit Database
+
+### 5.1 Elimination of Generic Exception Captures
+All file I/O operations (scanning, checking timestamps, directory creation, moving, and database writes) have been stripped of empty generic captures (`except Exception: pass`). Specific, granular exceptions are trapped individually:
+- `PermissionError` (distinguishing file lock `winerror=32` vs. permission denial `winerror=5`).
+- `FileNotFoundError` (for files vanishing mid-operation).
+- `NotADirectoryError` (when folder paths point to regular files).
+- `FileExistsError` / `shutil.SameFileError` (for collisions).
+- `OSError` with specific error codes: `errno.ENOSPC` (disk full), `errno.ENAMETOOLONG` (Windows 260 character limit), `errno.EINVAL` (illegal characters), `errno.EROFS` (read-only media).
+
+### 5.2 Friendly Message Formatting (`src/errors.py`)
+Rather than emitting raw Python exceptions (e.g., `[WinError 32] The process cannot access...`), the system translates errors into plain-English descriptions with clear recovery actions (e.g., *"File in use: 'budget.xlsx' is currently locked by another program. Please close any application using it and try again"*).
+
+### 5.3 Local Audit Database (`src/database.py`)
+- Employs a local SQLite database (`outputs/archives_history.db`) to record each organization run and its granular file tasks.
+- Database access is isolated with timeouts and granular handlers for `sqlite3.OperationalError`, `sqlite3.IntegrityError`, and `sqlite3.DatabaseError`.
+- If the database file is unwritable, a warning is logged to the user activity console, but primary file reorganization is never blocked or compromised.

@@ -28,16 +28,20 @@ ArchivesOrganizer/
 │   └── changelog.md             # Plain-English modification register & logbook
 ├── tests/                       # Automated unit test suite
 │   ├── test_organizer.py        # Standard logic and simulation tests
-│   └── test_edge_cases.py       # Comprehensive edge case tests (nulls, giant inputs, etc.)
+│   ├── test_edge_cases.py       # Comprehensive edge case tests (nulls, giant inputs, etc.)
+│   └── test_errors_and_db.py    # Granular I/O error formatting and SQLite database tests
 ├── config/                      # Category and extension configurations
 │   └── default_config.py
 ├── assets/                      # Icons and visual resources (.ico, .png)
 │   ├── icon.ico
 │   └── icon.png
-├── outputs/                     # Output directory
+├── outputs/                     # Output directory (contains local SQLite audit database)
+│   └── archives_history.db
 ├── src/                         # Application source code
 │   ├── __init__.py
 │   ├── organizer.py             # Core organization logic engine
+│   ├── errors.py                # Granular file system & DB error translation
+│   ├── database.py              # Local SQLite database manager for audit history
 │   ├── generate_assets.py       # Application icon generator
 │   └── ui/                      # PySide6 graphical user interface module
 │       ├── __init__.py
@@ -54,14 +58,14 @@ ArchivesOrganizer/
 
 ## Automated Unit Testing
 
-The project maintains comprehensive test coverage across both standard workflows and extreme edge cases:
+The project maintains comprehensive test coverage across both standard workflows, extreme edge cases, and granular error handling:
 
 ```bash
-# Run all unit tests (standard and edge cases)
+# Run all unit tests (standard, edge cases, and database)
 python -m unittest discover tests
 
-# Run only the edge case stress-test suite
-python -m unittest tests/test_edge_cases.py
+# Run granular error and database tests specifically
+python -m unittest tests/test_errors_and_db.py
 ```
 
 ---

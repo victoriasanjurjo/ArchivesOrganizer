@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from config.default_config import APP_TITLE, APP_VERSION
 from src.organizer import FileOrganizer, OrganizationMode, FileTask
+from src.database import AuditDatabaseManager
 from src.ui.styles import MONOCHROME_STYLE
 
 
@@ -70,6 +71,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.base_dir = base_dir
         self.organizer = FileOrganizer()
+        self.db = AuditDatabaseManager()
         self.current_tasks: List[FileTask] = []
         self.worker: Optional[OrganizerWorker] = None
 
@@ -81,6 +83,8 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(MONOCHROME_STYLE)
         self._build_ui()
         self._log("System initialized in 100% local mode. Ready to operate.")
+        if self.db.last_error_message:
+            self._log(f"[Audit Notice] {self.db.last_error_message}")
 
     def _setup_icon(self):
         """Sets the application icon on the window."""
@@ -261,10 +265,10 @@ class MainWindow(QMainWindow):
         self.log_view.append(f"[{ts}] {text}")
 
     def _run_simulation(self):
-        """Scans files and projects the reorganization (Dry Run)."""
+        """Scans files and projects the reorganization (Dry Run) with granular error handling."""
         src = self.src_input.text().strip()
-        if not src or not os.path.isdir(src):
-            QMessageBox.warning(self, "Invalid Path", "Please select a valid source directory.")
+        if not src:
+            QMessageBox.warning(self, "Missing Path", "Please select a source folder before scanning.")
             return
 
         dst = self.dst_input.text().strip() or src
@@ -276,9 +280,25 @@ class MainWindow(QMainWindow):
 
         try:
             self.current_tasks = self.organizer.scan_files(src, dst, mode, recursive)
-        except Exception as e:
-            QMessageBox.critical(self, "Read Error", f"Could not scan directory: {e}")
-            self._log(f"[ERROR] {e}")
+        except PermissionError as e:
+            QMessageBox.critical(self, "Access Denied", str(e))
+            self._log(f"[Access Error] {e}")
+            self.statusBar().showMessage("Scan failed: Access denied")
+            return
+        except FileNotFoundError as e:
+            QMessageBox.critical(self, "Folder Missing", str(e))
+            self._log(f"[Not Found Error] {e}")
+            self.statusBar().showMessage("Scan failed: Folder missing")
+            return
+        except OSError as e:
+            QMessageBox.critical(self, "File System Error", str(e))
+            self._log(f"[System Error] {e}")
+            self.statusBar().showMessage("Scan failed: System error")
+            return
+        except ValueError as e:
+            QMessageBox.warning(self, "Invalid Path", str(e))
+            self._log(f"[Validation Error] {e}")
+            self.statusBar().showMessage("Scan failed: Invalid path")
             return
 
         if not self.current_tasks:
@@ -296,10 +316,22 @@ class MainWindow(QMainWindow):
         self._log(f"Simulation complete: {len(self.current_tasks)} files analyzed ({movable_count} ready to move).")
         self.statusBar().showMessage(f"Simulation: {movable_count} files ready")
         
+        # Log simulation session in local database
+        self.db.log_organization_run(
+            source_dir=src,
+            dest_dir=dst,
+            mode=mode.value,
+            recursive=recursive,
+            dry_run=True,
+            tasks=self.current_tasks
+        )
+        if self.db.last_error_message:
+            self._log(f"[Audit Notice] {self.db.last_error_message}")
+
         self.btn_organize.setEnabled(movable_count > 0)
 
     def _populate_table(self, tasks: List[FileTask]):
-        """Populates the visual table with file tasks."""
+        """Populates the visual table with file tasks and friendly status tooltips."""
         self.table.setRowCount(len(tasks))
         for row, task in enumerate(tasks):
             # Filename
@@ -320,8 +352,10 @@ class MainWindow(QMainWindow):
             item_dest = QTableWidgetItem(f"/{rel_dest}/{task.filename}")
             self.table.setItem(row, 3, item_dest)
 
-            # Status
+            # Status with friendly tooltip if error occurred
             item_status = QTableWidgetItem(task.status)
+            if task.status == "Error" and task.error_message:
+                item_status.setToolTip(task.error_message)
             self.table.setItem(row, 4, item_status)
 
     def _run_organization(self):
@@ -361,7 +395,10 @@ class MainWindow(QMainWindow):
         # Update matching row in table
         for row in range(self.table.rowCount()):
             if self.table.item(row, 0).text() == task.filename:
-                self.table.item(row, 4).setText(task.status)
+                status_item = self.table.item(row, 4)
+                status_item.setText(task.status)
+                if task.status == "Error" and task.error_message:
+                    status_item.setToolTip(task.error_message)
                 break
 
     def _on_worker_finished(self, tasks: List[FileTask]):
@@ -374,15 +411,42 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Completed: {success} moved, {errors} errors")
         self.btn_organize.setEnabled(False)
 
+        # Log physical execution session in local audit database
+        src = self.src_input.text().strip()
+        dst = self.dst_input.text().strip() or src
+        mode = self.mode_combo.currentData()
+        recursive = self.recursive_chk.isChecked()
+        self.db.log_organization_run(
+            source_dir=src,
+            dest_dir=dst,
+            mode=mode.value if mode else "Unknown",
+            recursive=recursive,
+            dry_run=False,
+            tasks=tasks
+        )
+        if self.db.last_error_message:
+            self._log(f"[Audit Notice] {self.db.last_error_message}")
+
         if errors == 0:
             QMessageBox.information(
                 self, "Operation Successful",
-                f"Successfully organized {success} files."
+                f"Successfully organized {success} files into their destination folders."
             )
         else:
+            # Collect unique user-friendly error samples to display directly in the alert
+            error_samples = []
+            for t in tasks:
+                if t.status == "Error" and t.error_message and t.error_message not in error_samples:
+                    error_samples.append(f"• {t.error_message}")
+                    if len(error_samples) >= 3:
+                        break
+            
+            sample_text = "\n".join(error_samples)
             QMessageBox.warning(
                 self, "Completed with warnings",
-                f"Moved {success} files, but {errors} encountered errors. Check the activity log."
+                f"Moved {success} files, but {errors} could not be organized.\n\n"
+                f"Encountered issues:\n{sample_text}\n\n"
+                "Check the Activity Log below for full details on each affected file."
             )
 
     def _set_ui_busy(self, busy: bool):

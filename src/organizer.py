@@ -10,6 +10,7 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import List, Dict, Callable, Optional
 from config.default_config import DEFAULT_CATEGORIES
+from src.errors import format_file_error
 
 
 class OrganizationMode(Enum):
@@ -102,7 +103,9 @@ class FileOrganizer:
                 fmt = date_format if (isinstance(date_format, str) and date_format.strip()) else "%Y-%m"
                 formatted = dt.strftime(fmt)
                 return formatted if formatted.strip() else "Unknown_Date"
-            except Exception:
+            except (FileNotFoundError, PermissionError, OSError):
+                return "Unknown_Date"
+            except (ValueError, TypeError):
                 return "Unknown_Date"
                 
         return "Miscellaneous"
@@ -118,9 +121,13 @@ class FileOrganizer:
         candidate_path = os.path.join(safe_target_folder, safe_filename)
         counter = 1
 
-        while os.path.exists(candidate_path):
-            candidate_path = os.path.join(safe_target_folder, f"{base_name} ({counter}){ext}")
-            counter += 1
+        try:
+            while os.path.exists(candidate_path):
+                candidate_path = os.path.join(safe_target_folder, f"{base_name} ({counter}){ext}")
+                counter += 1
+        except (PermissionError, OSError):
+            # Fall back to current candidate path if permission or path length limits prevent checking
+            pass
 
         return candidate_path
 
@@ -135,8 +142,14 @@ class FileOrganizer:
         """
         Scans files in the source directory and projects operations without modifying disk state.
         """
-        if not source_dir or not isinstance(source_dir, str) or not os.path.isdir(source_dir):
-            raise ValueError(f"Source directory does not exist or is invalid: {source_dir}")
+        if not source_dir or not isinstance(source_dir, str):
+            raise ValueError("Source directory must be a non-empty string path.")
+
+        try:
+            if not os.path.isdir(source_dir):
+                raise ValueError(f"Source directory does not exist or is invalid: {source_dir}")
+        except (PermissionError, OSError) as e:
+            raise ValueError(format_file_error(e, source_dir, "directory inspection"))
 
         if not dest_dir or not isinstance(dest_dir, str):
             dest_dir = source_dir
@@ -154,26 +167,39 @@ class FileOrganizer:
                 return False
 
         if recursive:
-            for root, dirs, files in os.walk(normalized_source):
-                # Avoid entering destination directory if nested
-                if is_subpath(root, normalized_dest) and root != normalized_source:
-                    continue
+            try:
+                for root, dirs, files in os.walk(normalized_source):
+                    # Avoid entering destination directory if nested
+                    if is_subpath(root, normalized_dest) and root != normalized_source:
+                        continue
 
-                for f in files:
-                    full_path = os.path.join(root, f)
-                    task = self._create_task(full_path, normalized_dest, mode, date_format)
-                    if task:
-                        tasks.append(task)
+                    for f in files:
+                        full_path = os.path.join(root, f)
+                        task = self._create_task(full_path, normalized_dest, mode, date_format)
+                        if task:
+                            tasks.append(task)
+            except PermissionError as e:
+                raise PermissionError(format_file_error(e, normalized_source, "subfolder scanning"))
+            except OSError as e:
+                raise OSError(format_file_error(e, normalized_source, "recursive search"))
         else:
             try:
                 with os.scandir(normalized_source) as entries:
                     for entry in entries:
-                        if entry.is_file(follow_symlinks=False):
-                            task = self._create_task(entry.path, normalized_dest, mode, date_format)
-                            if task:
-                                tasks.append(task)
+                        try:
+                            if entry.is_file(follow_symlinks=False):
+                                task = self._create_task(entry.path, normalized_dest, mode, date_format)
+                                if task:
+                                    tasks.append(task)
+                        except (PermissionError, OSError):
+                            # Skip unreadable individual entry and continue scanning remaining files
+                            continue
             except PermissionError as e:
-                raise PermissionError(f"Permission denied reading directory: {e}")
+                raise PermissionError(format_file_error(e, normalized_source, "reading directory"))
+            except FileNotFoundError as e:
+                raise FileNotFoundError(format_file_error(e, normalized_source, "locating directory"))
+            except OSError as e:
+                raise OSError(format_file_error(e, normalized_source, "scanning folder"))
 
         return tasks
 
@@ -184,16 +210,18 @@ class FileOrganizer:
         mode: OrganizationMode,
         date_format: str
     ) -> Optional[FileTask]:
-        """Creates a projected operation task for an individual file."""
+        """Creates a projected operation task for an individual file with granular metadata reading."""
         filename = os.path.basename(filepath)
+        error_msg = ""
         
         try:
             stat = os.stat(filepath)
             size = stat.st_size
             mtime = datetime.fromtimestamp(stat.st_mtime)
-        except Exception:
+        except (FileNotFoundError, PermissionError, OSError) as e:
             size = 0
             mtime = datetime.now()
+            error_msg = format_file_error(e, filepath, "reading file details")
 
         subfolder_name = self.get_destination_folder_name(filepath, mode, date_format)
         target_folder = os.path.join(dest_dir, subfolder_name)
@@ -217,7 +245,8 @@ class FileOrganizer:
             category=category,
             size_bytes=size,
             modified_time=mtime,
-            status=status
+            status=status,
+            error_message=error_msg
         )
 
     def execute_tasks(
@@ -227,7 +256,7 @@ class FileOrganizer:
         progress_callback: Optional[Callable[[int, int, FileTask], None]] = None
     ) -> List[FileTask]:
         """
-        Executes projected tasks or simulates their execution if dry_run is True.
+        Executes projected tasks or simulates their execution with granular error handling.
         """
         if not tasks or not isinstance(tasks, list):
             return []
@@ -241,7 +270,7 @@ class FileOrganizer:
                 if progress_callback:
                     try:
                         progress_callback(idx + 1, total, task)
-                    except Exception:
+                    except (TypeError, ValueError, RuntimeError):
                         pass
                 continue
 
@@ -250,31 +279,48 @@ class FileOrganizer:
                 if progress_callback:
                     try:
                         progress_callback(idx + 1, total, task)
-                    except Exception:
+                    except (TypeError, ValueError, RuntimeError):
                         pass
                 continue
 
             try:
-                # Create destination folder if it does not exist
+                # 1. Create destination folder if it does not exist
                 os.makedirs(task.target_folder, exist_ok=True)
                 
-                # Resolve real collision at time of moving
+                # 2. Resolve duplicate name collisions before moving
                 final_target_path = self.resolve_target_collision(
                     task.target_folder,
                     os.path.basename(task.source_path)
                 )
                 
+                # 3. Physically relocate file
                 shutil.move(task.source_path, final_target_path)
                 task.target_path = final_target_path
                 task.status = "Moved"
+                task.error_message = ""
+            except PermissionError as e:
+                task.status = "Error"
+                task.error_message = format_file_error(e, task.source_path, "relocating file")
+            except FileNotFoundError as e:
+                task.status = "Error"
+                task.error_message = format_file_error(e, task.source_path, "locating file")
+            except (FileExistsError, shutil.SameFileError) as e:
+                task.status = "Error"
+                task.error_message = format_file_error(e, task.source_path, "resolving destination conflict")
+            except shutil.Error as e:
+                task.status = "Error"
+                task.error_message = format_file_error(e, task.source_path, "moving file")
+            except OSError as e:
+                task.status = "Error"
+                task.error_message = format_file_error(e, task.source_path, "writing to disk")
             except Exception as e:
                 task.status = "Error"
-                task.error_message = str(e)
+                task.error_message = format_file_error(e, task.source_path, "processing task")
 
             if progress_callback:
                 try:
                     progress_callback(idx + 1, total, task)
-                except Exception:
+                except (TypeError, ValueError, RuntimeError):
                     pass
 
         return tasks

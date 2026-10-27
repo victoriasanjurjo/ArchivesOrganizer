@@ -56,6 +56,46 @@ Whenever code or project files are updated, add a new entry to the top of Sectio
 
 ## 3. Modification History
 
+### [Date: 2026-10-27] - Granular Error Management & Local SQLite Audit Database
+
+- **Goal in Plain English:**  
+  We identified all file reading, writing, and moving operations, removed all silent error captures, translated technical error codes into friendly explanations that tell you exactly what went wrong and how to fix it, and added a local database to safely record your organization history.
+
+- **What Was Changed:**
+  1. **Built an Error Translation System (`src/errors.py`):**
+     - Replaced technical computer error codes (like `[WinError 32]` or `[Errno 13]`) with friendly, helpful sentences.
+     - If a file is open in another app (like Excel or Word), it tells you: *"File in use: 'budget.xlsx' is currently locked by another program. Please close any application using it and try again."*
+     - If disk space runs out, it tells you: *"Disk full: There is not enough free storage space on the target drive."*
+     - If you don't have Windows administrator permissions, it tells you how to resolve it.
+     - Specific translations were also built for path length limits, illegal characters, and missing files.
+  2. **Introduced a Local SQLite Audit Database (`src/database.py`):**
+     - Created a local database (`outputs/archives_history.db`) that records every scan and move session.
+     - Logs the session time, folders used, total files, and any specific errors.
+     - Built with shielded error handling: if the database file is busy or unwritable, it gently logs a warning and will never stop or block your files from being moved.
+  3. **Upgraded the Organizer Engine (`src/organizer.py`):**
+     - Removed all silent or empty error catches (`except: pass`).
+     - Added granular error trapping to directory reading, metadata scanning, folder creation, and file relocation.
+     - Assigned friendly error messages directly to each task's record.
+  4. **Enhanced the User Interface (`src/ui/main_window.py`):**
+     - Connected the window to the local audit database.
+     - Added helpful hover tooltips to the table's Status column so you can see why an item failed by pointing your mouse at it.
+     - Upgraded completion alerts to summarize the exact friendly reasons for any files that could not be moved.
+  5. **Added Verification Tests (`tests/test_errors_and_db.py`):**
+     - Added 12 new automated checks verifying error formatting and database operations.
+     - Total test suite expanded to 53 passing tests.
+
+- **Why This Matters to the User:**
+  You no longer have to guess why a file failed or search Google for confusing code numbers like `WinError 32` or `Errno 2`. The app explains the problem in clear English, and your past sessions are safely recorded in your local audit database.
+
+- **Safety Checks & Test Results:**
+  - Ran all 53 automated checks across the three test suites.
+  - **Result:** 100% Passed (0 errors, 0 failures) in 2.33 seconds.
+
+- **Application Status:**
+  - Rebuilt and packaged in `dist/ArchivesOrganizer/ArchivesOrganizer.exe`.
+
+---
+
 ### [Date: 2026-10-27] - Complete English Localization Across the Entire Application
 
 - **Goal in Plain English:**  
