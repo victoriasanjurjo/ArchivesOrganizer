@@ -1,81 +1,81 @@
 # ArchivesOrganizer
 
-**ArchivesOrganizer** es una aplicación de escritorio diseñada para clasificar y organizar archivos de forma automatizada, segura y **100% local**. Posee una interfaz gráfica moderna, sobria y monocromática desarrollada con **PySide6 (Qt)**, garantizando privacidad absoluta al operar sin conexiones a internet ni telemetría externa.
+**ArchivesOrganizer** is a desktop application designed to classify and reorganize files automatically, securely, and **100% locally**. It features a modern, clean, and monochrome graphical user interface developed with **PySide6 (Qt)**, ensuring complete privacy by operating entirely offline without internet connections or telemetry.
 
 ---
 
-## Características Principales
+## Key Features
 
-- **Operación 100% Local y Privada:** Todo el escaneo y reubicación de archivos se ejecuta en el almacenamiento local del equipo sin enviar información a ningún servidor.
-- **Múltiples Criterios de Organización:**
-  - **Por Categoría:** Agrupa por propósito semántico (*Documentos*, *Imágenes*, *Videos*, *Audio*, *Comprimidos*, *Programación*, *Ejecutables e Instaladores*, *Otros*).
-  - **Por Extensión:** Crea carpetas basadas en la extensión exacta del archivo (ej. `PDF/`, `PNG/`, `DOCX/`).
-  - **Por Fecha (Año/Mes):** Organiza según la fecha de modificación en carpetas temporales (ej. `2026-10/`).
-- **Modo Simulación / Vista Previa (Dry Run):** Inspecciona visualmente las operaciones proyectadas antes de realizar cualquier cambio físico en el disco.
-- **Prevención de Sobreescritura (Resolución de Colisiones):** Si ya existe un archivo con el mismo nombre en la carpeta de destino, se añade automáticamente un sufijo correlativo incremental (ej. `documento (1).pdf`).
-- **Soporte de Escaneo Recursivo:** Opción para organizar solo la raíz de la carpeta seleccionada o procesar también las subcarpetas.
-- **Auditoría y Registro en Tiempo Real:** Consola de eventos integrada con registro cronológico de cada operación realizada.
-- **Estética Monocromática Profesional:** Interfaz en escala de grises y carbón de alto contraste y legibilidad.
+- **100% Local & Private Operation:** All scanning and file relocation takes place strictly on your local storage without transmitting data anywhere.
+- **Multiple Organization Rules:**
+  - **By Category:** Groups files by semantic purpose (*Documents*, *Images*, *Videos*, *Audio*, *Compressed*, *Code*, *Executables & Installers*, *Others*).
+  - **By Exact Extension:** Creates folders named after the exact extension (e.g., `PDF/`, `PNG/`, `DOCX/`).
+  - **By Date (Year/Month):** Organizes files according to their last modified date into time-based folders (e.g., `2026-10/`).
+- **Simulation / Preview Mode (Dry Run):** Visually inspect projected operations before making any physical alterations to disk.
+- **Overwrite Prevention (Collision Resolution):** If a file with the same name already exists in the destination folder, an incremental counter is automatically appended (e.g., `document (1).pdf`).
+- **Recursive Scanning Support:** Option to organize only the root of the chosen folder or process all nested subfolders.
+- **Real-Time Audit Logging:** Integrated activity console providing a live chronological record of every operation.
+- **Professional Monochrome Aesthetic:** High-contrast grayscale and charcoal theme designed for maximum clarity and readability.
 
 ---
 
-## Arquitectura del Proyecto
+## Project Architecture
 
 ```text
 ArchivesOrganizer/
-├── docs/                        # Documentación técnica, decisiones y bitácora
-│   ├── architecture.md          # Arquitectura técnica y justificaciones
-│   └── changelog.md             # Registro de modificaciones y bitácora (en inglés claro)
-├── tests/                       # Pruebas unitarias automatizadas
-│   ├── test_organizer.py        # Pruebas estándar de lógica y simulación
-│   └── test_edge_cases.py       # Pruebas de casos extremos (nulos, gigantes, etc.)
-├── config/                      # Ajustes y configuración de categorías
+├── docs/                        # Technical documentation, decisions, and changelog
+│   ├── architecture.md          # Technical architecture & design rationale
+│   └── changelog.md             # Plain-English modification register & logbook
+├── tests/                       # Automated unit test suite
+│   ├── test_organizer.py        # Standard logic and simulation tests
+│   └── test_edge_cases.py       # Comprehensive edge case tests (nulls, giant inputs, etc.)
+├── config/                      # Category and extension configurations
 │   └── default_config.py
-├── assets/                      # Íconos y recursos visuales (.ico, .png)
+├── assets/                      # Icons and visual resources (.ico, .png)
 │   ├── icon.ico
 │   └── icon.png
-├── outputs/                     # Directorio de salida
-├── src/                         # Código fuente de la aplicación
+├── outputs/                     # Output directory
+├── src/                         # Application source code
 │   ├── __init__.py
-│   ├── organizer.py             # Motor lógico de organización de archivos
-│   ├── generate_assets.py       # Generador de íconos de la app
-│   └── ui/                      # Módulo de interfaz gráfica PySide6
+│   ├── organizer.py             # Core organization logic engine
+│   ├── generate_assets.py       # Application icon generator
+│   └── ui/                      # PySide6 graphical user interface module
 │       ├── __init__.py
-│       ├── main_window.py       # Ventana principal e integración multihilo
-│       └── styles.py            # Hoja de estilos QSS monocromática
-├── .gitignore                   # Exclusiones de control de versiones
-├── requirements.txt             # Dependencias exactas instaladas
-├── LICENSE.txt                  # Licencia de software MIT
-├── README.md                    # Manual y documentación general
-└── main.py                      # Punto de entrada de la aplicación
+│       ├── main_window.py       # Main window & multithreaded task management
+│       └── styles.py            # Monochrome QSS stylesheet
+├── .gitignore                   # Version control exclusions
+├── requirements.txt             # Exact installed dependencies
+├── LICENSE.txt                  # MIT open source license
+├── README.md                    # General project manual & execution guide
+└── main.py                      # Application entry point
 ```
 
 ---
 
-## Pruebas Unitarias Automatizadas
+## Automated Unit Testing
 
-El proyecto cuenta con una cobertura integral de pruebas que abarca el flujo nominal y la tolerancia a anomalías del entorno:
+The project maintains comprehensive test coverage across both standard workflows and extreme edge cases:
 
 ```bash
-# Ejecutar todas las pruebas unitarias (estándar y casos extremos)
+# Run all unit tests (standard and edge cases)
 python -m unittest discover tests
 
-# Ejecutar específicamente la suite de casos extremos
+# Run only the edge case stress-test suite
 python -m unittest tests/test_edge_cases.py
 ```
 
 ---
 
-## Versión y Distribución
+## Release & Distribution
 
-Actualmente se encuentra disponible la **primera versión (v1.0.0)** de la aplicación provista directamente como ejecutable listo para usar:
+A standalone, ready-to-run Windows executable (**Version 1.0.0**) is provided directly:
 
-- **Ejecutable compilado:** `dist/ArchivesOrganizer/ArchivesOrganizer.exe`
+- **Compiled Executable:** `dist/ArchivesOrganizer/ArchivesOrganizer.exe`
 
-No requiere instalaciones adicionales ni ejecución mediante consola; basta con iniciar el archivo `.exe` para acceder a la interfaz gráfica.
+No installation or terminal commands are required; simply double-click the `.exe` file to start the desktop interface.
 
 ---
 
-## Licencia
+## License
 
-Este proyecto está distribuido bajo la licencia **MIT**. Para más detalles, consulta el archivo [LICENSE.txt](file:///d:/Proyectos/ArchivesOrganizer/LICENSE.txt).
+This project is distributed under the **MIT License**. For full details, see the [LICENSE.txt](file:///d:/Proyectos/ArchivesOrganizer/LICENSE.txt) file.

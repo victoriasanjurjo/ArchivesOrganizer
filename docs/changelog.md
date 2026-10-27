@@ -56,6 +56,41 @@ Whenever code or project files are updated, add a new entry to the top of Sectio
 
 ## 3. Modification History
 
+### [Date: 2026-10-27] - Complete English Localization Across the Entire Application
+
+- **Goal in Plain English:**  
+  Translated every single text, button, dialog, status message, log notice, category name, code comment, documentation file, and automated test into clear, natural English.
+
+- **What Was Changed:**
+  1. **Visual User Interface (`src/ui/main_window.py`):**
+     - Translated all button labels ("Browse...", "1. Simulate / Preview (Dry Run)", "2. Organize Files (Move)", "Clear").
+     - Translated all settings ("Source Folder:", "Destination Folder:", "Mode / Rule:", "Scan subfolders (recursive)").
+     - Translated table columns ("Filename", "Category / Rule", "Size", "Projected Target", "Status").
+     - Translated all pop-up dialogs, error alerts, confirmation screens, and live status bar updates.
+  2. **Core Sorting Categories & Logic (`config/default_config.py` & `src/organizer.py`):**
+     - Renamed categories from Spanish to English: *Documents, Images, Videos, Audio, Compressed, Code, Executables & Installers, Others*.
+     - Renamed sorting modes to *By Category*, *By Extension*, and *By Date (Year/Month)*.
+     - Translated file status markers to *Pending*, *Simulated*, *Moved*, *Skipped*, *Error*, and *Already at destination*.
+     - Translated fallback folder names (e.g., `No_Extension`, `Unknown_Date`, `Miscellaneous`).
+  3. **Automated Unit Tests (`tests/test_organizer.py` & `tests/test_edge_cases.py`):**
+     - Updated all assertions and test descriptions to match the English category and status names.
+  4. **Documentation & Manuals (`README.md`, `docs/architecture.md`):**
+     - Fully translated the project manual and technical architecture documents into English.
+  5. **Executable Application:**
+     - Recompiled the Windows standalone `.exe` so the English interface is packaged and ready to run.
+
+- **Why This Matters to the User:**
+  Allows international and English-speaking users to navigate the app comfortably, understand every button and message clearly, and review the project documentation and code without a language barrier.
+
+- **Safety Checks & Test Results:**
+  - Ran all 41 automated checks across both test suites.
+  - **Result:** 100% Passed (0 errors, 0 failures) in 0.072 seconds.
+
+- **Application Status:**
+  - Updated and compiled into `dist/ArchivesOrganizer/ArchivesOrganizer.exe`.
+
+---
+
 ### [Date: 2026-10-27] - Extreme Situations & Stress Testing Suite (Edge Cases)
 
 - **Goal in Plain English:**  
